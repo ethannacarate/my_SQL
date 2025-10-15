@@ -1,0 +1,244 @@
+-- ========================================================
+-- creacion.sql
+-- Creación de la base de datos "seguridad_plazas" y sus tablas
+-- Normalizado en 3FN. Compatible con MySQL 8.x (InnoDB)
+-- ========================================================
+
+-- Crear base de datos (si no existe) y usarla
+CREATE DATABASE IF NOT EXISTS seguridad_plazas
+  DEFAULT CHARACTER SET = utf8mb4
+  DEFAULT COLLATE = utf8mb4_unicode_ci;
+USE seguridad_plazas;
+
+-- --------------------------------------------------------
+-- Tabla: roles
+-- Guarda los roles que pueden tener los usuarios (admin, operador, vecino)
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS roles (
+    id_rol INT AUTO_INCREMENT PRIMARY KEY,
+    nombre_rol VARCHAR(50) NOT NULL UNIQUE,  -- nombre legible del rol
+    descripcion TEXT,                        -- descripción del rol
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE
+) ENGINE=InnoDB;
+
+-- --------------------------------------------------------
+-- Tabla: plazas
+-- Información de las plazas o recintos monitoreados
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS plazas (
+    id_plaza INT AUTO_INCREMENT PRIMARY KEY,
+    nombre_plaza VARCHAR(100) NOT NULL,
+    direccion VARCHAR(255) NOT NULL,
+    comuna VARCHAR(100),
+    junta_vecinos VARCHAR(255),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    UNIQUE (nombre_plaza, direccion) -- evita duplicados exactos
+) ENGINE=InnoDB;
+
+-- --------------------------------------------------------
+-- Tabla: usuarios
+-- Usuarios del sistema: vecinos, operadores o administradores
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS usuarios (
+    id_usuario INT AUTO_INCREMENT PRIMARY KEY,
+    id_rol INT NOT NULL,
+    id_plaza INT,                            -- plaza asignada (opcional)
+    rut VARCHAR(20) NOT NULL UNIQUE,
+    nombre_usuario VARCHAR(100),
+    correo VARCHAR(100) NOT NULL UNIQUE,
+    telefono VARCHAR(30),
+    direccion VARCHAR(255),
+    password_hash VARCHAR(255) NOT NULL,     -- hash de contraseña
+    fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP,
+    activo BOOLEAN DEFAULT TRUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    modified_by INT,                         -- id del usuario que modificó (opcional)
+    CONSTRAINT fk_usuarios_roles FOREIGN KEY (id_rol) REFERENCES roles(id_rol)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_usuarios_plazas FOREIGN KEY (id_plaza) REFERENCES plazas(id_plaza)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- --------------------------------------------------------
+-- Tabla: camaras
+-- Cámaras instaladas en cada plaza
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS camaras (
+    id_camara INT AUTO_INCREMENT PRIMARY KEY,
+    id_plaza INT NOT NULL,
+    nombre_camara VARCHAR(100) NOT NULL,
+    ubicacion VARCHAR(255),
+    estado ENUM('activo','inactivo','mantenimiento') DEFAULT 'activo',
+    automatizada BOOLEAN DEFAULT TRUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    CONSTRAINT fk_camaras_plazas FOREIGN KEY (id_plaza) REFERENCES plazas(id_plaza)
+        ON DELETE CASCADE,
+    UNIQUE (id_plaza, nombre_camara)
+) ENGINE=InnoDB;
+
+-- --------------------------------------------------------
+-- Tabla: reportes
+-- Reportes de incidentes o eventos registrados
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS reportes (
+    id_reporte INT AUTO_INCREMENT PRIMARY KEY,
+    id_plaza INT NOT NULL,
+    id_camara INT,
+    tipo_reporte VARCHAR(100) NOT NULL,   -- ejemplo: "vandalismo", "ruido", etc.
+    descripcion TEXT,
+    fecha_reporte DATE NOT NULL,
+    hora_reporte TIME NOT NULL,
+    estado ENUM('abierto','en_progreso','resuelto') DEFAULT 'abierto',
+    gravedad TINYINT,
+    archivo_adjunto VARCHAR(255),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    CONSTRAINT fk_reportes_plazas FOREIGN KEY (id_plaza) REFERENCES plazas(id_plaza)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_reportes_camaras FOREIGN KEY (id_camara) REFERENCES camaras(id_camara)
+        ON DELETE SET NULL,
+    CONSTRAINT chk_gravedad CHECK (gravedad BETWEEN 1 AND 5)
+) ENGINE=InnoDB;
+
+-- --------------------------------------------------------
+-- Tabla: reporte_usuarios
+-- Relación N:N entre reportes y usuarios
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS reporte_usuarios (
+    id_reporte INT NOT NULL,
+    id_usuario INT NOT NULL,
+    rol_en_reporte VARCHAR(50) NOT NULL, -- ej: "reportante", "investigador"
+    fecha_asociado DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id_reporte, id_usuario),
+    CONSTRAINT fk_ru_reportes FOREIGN KEY (id_reporte) REFERENCES reportes(id_reporte)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_ru_usuarios FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario)
+        ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- --------------------------------------------------------
+-- Índices para mejorar el rendimiento en consultas frecuentes
+-- --------------------------------------------------------
+
+-- Índices de usuarios
+CREATE INDEX idx_usuarios_rol ON usuarios (id_rol);
+CREATE INDEX idx_usuarios_plaza ON usuarios (id_plaza);
+
+-- Índices de cámaras y reportes
+CREATE INDEX idx_camaras_plaza ON camaras (id_plaza);
+CREATE INDEX idx_reportes_plaza ON reportes (id_plaza);
+CREATE INDEX idx_reportes_estado ON reportes (estado);
+
+-- ========================================================
+-- consultas.sql
+-- Inserciones y consultas de prueba para la base de datos seguridad_plazas
+-- ========================================================
+
+USE seguridad_plazas;
+
+-- --------------------------------------------------------
+-- INSERTS: Roles del sistema
+-- --------------------------------------------------------
+INSERT INTO roles (nombre_rol, descripcion) VALUES
+('admin', 'Administrador con acceso total al sistema'),
+('operador', 'Encargado de monitoreo de cámaras y reportes'),
+('vecino', 'Usuario civil que puede reportar incidentes');
+
+-- --------------------------------------------------------
+-- INSERTS: Plazas
+-- --------------------------------------------------------
+INSERT INTO plazas (nombre_plaza, direccion, comuna, junta_vecinos) VALUES
+('Plaza Los Pinos', 'Av. Principal 123', 'Santiago Centro', 'Junta Vecinal Los Pinos'),
+('Plaza La Aurora', 'Calle Secundaria 45', 'Providencia', 'Junta Vecinal Aurora'),
+('Plaza del Sol', 'Camino Real 999', 'La Florida', NULL);
+
+-- --------------------------------------------------------
+-- INSERTS: Usuarios
+-- --------------------------------------------------------
+INSERT INTO usuarios (id_rol, id_plaza, rut, nombre_usuario, correo, telefono, direccion, password_hash)
+VALUES
+(1, NULL, '12.345.678-9', 'Mario Admin', 'mario.admin@example.com', '+56 9 1111 1111', 'Calle A 1', 'hash_admin'),
+(2, 1, '22.222.222-2', 'Laura Oper', 'laura.oper@example.com', '+56 9 2222 2222', 'Calle B 2', 'hash_oper'),
+(3, 1, '33.333.333-3', 'Juan Vecino', 'juan.vecino@example.com', '+56 9 3333 3333', 'Calle C 3', 'hash_vecino');
+
+-- --------------------------------------------------------
+-- INSERTS: Cámaras
+-- --------------------------------------------------------
+INSERT INTO camaras (id_plaza, nombre_camara, ubicacion, estado, automatizada) VALUES
+(1, 'Cam_Entrada', 'Entrada principal', 'activo', TRUE),
+(1, 'Cam_Jardin', 'Sector jardín', 'activo', TRUE),
+(2, 'Cam_Centro', 'Zona central de la plaza', 'mantenimiento', FALSE);
+
+-- --------------------------------------------------------
+-- INSERTS: Reportes
+-- --------------------------------------------------------
+INSERT INTO reportes (id_plaza, id_camara, tipo_reporte, descripcion, fecha_reporte, hora_reporte, estado, gravedad)
+VALUES
+(1, 1, 'vandalismo', 'Pared rayada con grafiti', '2025-10-10', '21:15:00', 'abierto', 3),
+(1, 2, 'ruido', 'Música alta pasada la medianoche', '2025-10-12', '00:30:00', 'en_progreso', 2),
+(2, 3, 'intrusión', 'Persona no autorizada en zona cerrada', '2025-10-14', '03:05:00', 'abierto', 4);
+
+-- --------------------------------------------------------
+-- INSERTS: Relación usuarios-reportes
+-- --------------------------------------------------------
+INSERT INTO reporte_usuarios (id_reporte, id_usuario, rol_en_reporte) VALUES
+(1, 2, 'investigador'),
+(1, 3, 'reportante'),
+(2, 3, 'testigo'),
+(3, 2, 'investigador');
+
+-- ========================================================
+-- CONSULTAS DE VERIFICACIÓN
+-- ========================================================
+
+-- 1) Mostrar todas las tablas de la base de datos
+SHOW TABLES;
+
+-- 2) Verificar datos insertados
+SELECT * FROM roles;
+SELECT * FROM plazas;
+SELECT * FROM usuarios;
+SELECT * FROM camaras;
+SELECT * FROM reportes;
+SELECT * FROM reporte_usuarios;
+
+-- 3) Mostrar registros activos (deleted = 0)
+SELECT * FROM usuarios WHERE deleted = 0;
+SELECT * FROM plazas WHERE deleted = 0;
+SELECT * FROM reportes WHERE deleted = 0;
+
+-- 4) Reportes con datos de plaza y cámara (JOIN)
+SELECT r.id_reporte, r.tipo_reporte, r.estado, r.gravedad,
+       p.nombre_plaza, c.nombre_camara
+FROM reportes r
+LEFT JOIN plazas p ON r.id_plaza = p.id_plaza
+LEFT JOIN camaras c ON r.id_camara = c.id_camara;
+
+-- 5) Usuarios asociados a cada reporte (JOIN)
+SELECT ru.id_reporte, u.nombre_usuario, ru.rol_en_reporte
+FROM reporte_usuarios ru
+JOIN usuarios u ON ru.id_usuario = u.id_usuario
+ORDER BY ru.id_reporte;
+
+-- 6) Validar CHECK: mostrar reportes fuera de rango (debe devolver 0 filas)
+SELECT * FROM reportes WHERE gravedad NOT BETWEEN 1 AND 5;
+
+-- 7) Actualización de ejemplo: marcar reporte como resuelto
+UPDATE reportes
+SET estado = 'resuelto', updated_at = CURRENT_TIMESTAMP
+WHERE id_reporte = 1;
+
+-- 8) Verificar actualización
+SELECT * FROM reportes WHERE id_reporte = 1;
+
+-- Fin del script consultas.sql
+
