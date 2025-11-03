@@ -1,0 +1,343 @@
+-- MySQL Workbench Forward Engineering
+
+SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0;
+SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0;
+SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+
+-- -----------------------------------------------------
+-- Schema mydb
+-- -----------------------------------------------------
+-- -----------------------------------------------------
+-- Schema seguridad_plazas
+-- -----------------------------------------------------
+
+-- -----------------------------------------------------
+-- Schema seguridad_plazas
+-- -----------------------------------------------------
+CREATE SCHEMA IF NOT EXISTS `seguridad_plazas` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci ;
+USE `seguridad_plazas` ;
+
+-- -----------------------------------------------------
+-- Table `seguridad_plazas`.`plazas`
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS `seguridad_plazas`.`plazas` (
+  `id_plaza` INT NOT NULL AUTO_INCREMENT,
+  `nombre_plaza` VARCHAR(100) NOT NULL,
+  `direccion` VARCHAR(255) NOT NULL,
+  `deleted` TINYINT(1) NOT NULL DEFAULT '0' COMMENT 'Borrado lógico: 0=activo, 1=eliminado',
+  `comuna` VARCHAR(100) NULL DEFAULT NULL,
+  `junta_vecinos` VARCHAR(255) NULL DEFAULT NULL,
+  `created_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_plaza`),
+  UNIQUE INDEX `nombre_plaza` (`nombre_plaza` ASC, `direccion` ASC) VISIBLE)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_unicode_ci;
+
+
+-- -----------------------------------------------------
+-- Table `seguridad_plazas`.`camaras`
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS `seguridad_plazas`.`camaras` (
+  `id_camara` INT NOT NULL AUTO_INCREMENT,
+  `id_plaza` INT NOT NULL COMMENT 'FK a la tabla plazas',
+  `nombre_camara` VARCHAR(100) NOT NULL,
+  `deleted` TINYINT(1) NOT NULL DEFAULT '0',
+  `ubicacion` VARCHAR(255) NULL DEFAULT NULL,
+  `estado` ENUM('activo', 'inactivo', 'mantenimiento') NULL DEFAULT 'activo',
+  `automatizada` TINYINT(1) NULL DEFAULT '1' COMMENT '1=Genera alertas IA, 0=Solo visualización',
+  `created_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_camara`),
+  UNIQUE INDEX `id_plaza` (`id_plaza` ASC, `nombre_camara` ASC) VISIBLE,
+  INDEX `idx_camaras_plaza` (`id_plaza` ASC) VISIBLE,
+  CONSTRAINT `fk_camaras_plazas`
+    FOREIGN KEY (`id_plaza`)
+    REFERENCES `seguridad_plazas`.`plazas` (`id_plaza`)
+    ON DELETE CASCADE)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_unicode_ci;
+
+
+-- -----------------------------------------------------
+-- Table `seguridad_plazas`.`reportes`
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS `seguridad_plazas`.`reportes` (
+  `id_reporte` INT NOT NULL AUTO_INCREMENT,
+  `id_plaza` INT NOT NULL COMMENT 'FK a la tabla plazas',
+  `id_camara` INT NOT NULL COMMENT 'FK a la cámara que lo captó (opcional)',
+  `tipo_reporte` VARCHAR(100) NOT NULL COMMENT 'Ej: Vandalismo, Robo, Actividad Sospechosa',
+  `fecha_reporte` DATE NOT NULL,
+  `hora_reporte` TIME NOT NULL,
+  `deleted` TINYINT(1) NOT NULL DEFAULT '0',
+  `estado` ENUM('abierto', 'en_progreso', 'resuelto') NULL DEFAULT 'abierto',
+  `gravedad` TINYINT NULL DEFAULT '3' COMMENT 'Nivel de gravedad (1-5)',
+  `descripcion` TEXT NULL DEFAULT NULL,
+  `archivo_adjunto` VARCHAR(255) NULL DEFAULT NULL,
+  `created_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_reporte`),
+  INDEX `fk_reportes_camaras` (`id_camara` ASC) VISIBLE,
+  INDEX `idx_reportes_plaza` (`id_plaza` ASC) VISIBLE,
+  INDEX `idx_reportes_estado` (`estado` ASC) VISIBLE,
+  CONSTRAINT `fk_reportes_camaras`
+    FOREIGN KEY (`id_camara`)
+    REFERENCES `seguridad_plazas`.`camaras` (`id_camara`)
+    ON DELETE SET NULL,
+  CONSTRAINT `fk_reportes_plazas`
+    FOREIGN KEY (`id_plaza`)
+    REFERENCES `seguridad_plazas`.`plazas` (`id_plaza`)
+    ON DELETE CASCADE)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_unicode_ci;
+
+
+-- -----------------------------------------------------
+-- Table `seguridad_plazas`.`roles`
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS `seguridad_plazas`.`roles` (
+  `id_rol` INT NOT NULL AUTO_INCREMENT,
+  `nombre_rol` VARCHAR(50) NOT NULL COMMENT 'Ej: Administrador, Operador, Vecino',
+  `deleted` TINYINT(1) NOT NULL DEFAULT '0',
+  `descripcion` TEXT NULL DEFAULT NULL,
+  `created_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_rol`),
+  UNIQUE INDEX `nombre_rol` (`nombre_rol` ASC) VISIBLE)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_unicode_ci;
+
+
+-- -----------------------------------------------------
+-- Table `seguridad_plazas`.`usuarios`
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS `seguridad_plazas`.`usuarios` (
+  `id_usuario` INT NOT NULL AUTO_INCREMENT,
+  `id_rol` INT NOT NULL COMMENT 'FK a la tabla roles',
+  `id_plaza` INT NOT NULL COMMENT 'FK a la plaza asociada (si aplica)',
+  `rut` VARCHAR(20) NOT NULL,
+  `deleted` TINYINT(1) NOT NULL DEFAULT '0',
+  `correo` VARCHAR(100) NOT NULL,
+  `password_hash` VARCHAR(255) NOT NULL,
+  `nombre_usuario` VARCHAR(100) NULL DEFAULT NULL,
+  `telefono` VARCHAR(30) NULL DEFAULT NULL,
+  `activo` TINYINT(1) NULL DEFAULT '1' COMMENT '1=activo, 0=inactivo',
+  `fecha_registro` DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+  `created_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `modified_by` INT NULL DEFAULT NULL,
+  PRIMARY KEY (`id_usuario`),
+  UNIQUE INDEX `rut` (`rut` ASC) VISIBLE,
+  UNIQUE INDEX `correo` (`correo` ASC) VISIBLE,
+  INDEX `idx_usuarios_rol` (`id_rol` ASC) VISIBLE,
+  INDEX `idx_usuarios_plaza` (`id_plaza` ASC) VISIBLE,
+  CONSTRAINT `fk_usuarios_plazas`
+    FOREIGN KEY (`id_plaza`)
+    REFERENCES `seguridad_plazas`.`plazas` (`id_plaza`)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_usuarios_roles`
+    FOREIGN KEY (`id_rol`)
+    REFERENCES `seguridad_plazas`.`roles` (`id_rol`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_unicode_ci;
+
+
+-- -----------------------------------------------------
+-- Table `seguridad_plazas`.`alertas`
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS `seguridad_plazas`.`alertas` (
+  `id_alerta` INT NOT NULL AUTO_INCREMENT,
+  `id_camara` INT NOT NULL COMMENT 'FK a la cámara que genera la alerta',
+  `id_reporte_asociado` INT NOT NULL COMMENT 'FK al reporte (si la alerta se escala)',
+  `id_usuario_revisor` INT NOT NULL COMMENT 'FK al operador que la gestionó',
+  `tipo_alerta` VARCHAR(50) NOT NULL COMMENT 'Ej: MOVIMIENTO_SOSPECHOSO, SONIDO_FUERTE',
+  `timestamp_alerta` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `estado_alerta` ENUM('pendiente', 'revisada', 'descartada', 'escalada') NOT NULL DEFAULT 'pendiente',
+  `deleted` TINYINT(1) NOT NULL DEFAULT '0',
+  `created_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_alerta`),
+  INDEX `idx_alertas_camara` (`id_camara` ASC) VISIBLE,
+  INDEX `idx_alertas_usuario` (`id_usuario_revisor` ASC) VISIBLE,
+  INDEX `idx_alertas_reporte` (`id_reporte_asociado` ASC) VISIBLE,
+  CONSTRAINT `fk_alertas_camaras`
+    FOREIGN KEY (`id_camara`)
+    REFERENCES `seguridad_plazas`.`camaras` (`id_camara`)
+    ON DELETE CASCADE,
+  CONSTRAINT `fk_alertas_reportes`
+    FOREIGN KEY (`id_reporte_asociado`)
+    REFERENCES `seguridad_plazas`.`reportes` (`id_reporte`)
+    ON DELETE SET NULL,
+  CONSTRAINT `fk_alertas_usuarios`
+    FOREIGN KEY (`id_usuario_revisor`)
+    REFERENCES `seguridad_plazas`.`usuarios` (`id_usuario`)
+    ON DELETE SET NULL)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_unicode_ci;
+
+
+-- -----------------------------------------------------
+-- Table `seguridad_plazas`.`reporte_usuarios`
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS `seguridad_plazas`.`reporte_usuarios` (
+  `id_reporte` INT NOT NULL COMMENT 'FK a la tabla reportes',
+  `id_usuario` INT NOT NULL COMMENT 'FK a la tabla usuarios',
+  `rol_en_reporte` VARCHAR(50) NOT NULL COMMENT 'Ej: reportado_por, asignado_a',
+  `fecha_asociado` DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_reporte`, `id_usuario`),
+  INDEX `fk_ru_usuarios` (`id_usuario` ASC) VISIBLE,
+  CONSTRAINT `fk_ru_reportes`
+    FOREIGN KEY (`id_reporte`)
+    REFERENCES `seguridad_plazas`.`reportes` (`id_reporte`)
+    ON DELETE CASCADE,
+  CONSTRAINT `fk_ru_usuarios`
+    FOREIGN KEY (`id_usuario`)
+    REFERENCES `seguridad_plazas`.`usuarios` (`id_usuario`)
+    ON DELETE CASCADE)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_unicode_ci;
+
+
+SET SQL_MODE=@OLD_SQL_MODE;
+SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
+SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
+
+
+
+-- =================================================================
+-- Script 2: Inserción de Datos (DML) y Consultas de Verificación
+-- Base de Datos: seguridad_plazas
+-- =================================================================
+
+-- Seleccionamos la base de datos sobre la cual trabajar
+USE `seguridad_plazas`;
+
+-- -----------------------------------------------------
+-- 1. Inserción de Datos (Poblamiento)
+-- -----------------------------------------------------
+
+-- Insertamos ROLES (Catálogo principal)
+INSERT INTO `roles` (`nombre_rol`, `descripcion`) VALUES
+('Administrador', 'Control total del sistema.'),
+('Operador', 'Monitorea cámaras, gestiona alertas y reportes.'),
+('Vecino', 'Puede generar reportes de incidentes.');
+
+-- Insertamos PLAZAS
+INSERT INTO `plazas` (`nombre_plaza`, `direccion`, `comuna`, `junta_vecinos`) VALUES
+('Plaza de Armas', 'Plaza de Armas s/n', 'Santiago', 'J.V. Centro Histórico'),
+('Plaza Italia (Baquedano)', 'Av. Providencia esq. Av. Vicuña Mackenna', 'Providencia', 'J.V. Bellavista'),
+('Parque O\'Higgins', 'Rondizzoni s/n', 'Santiago', 'J.V. Parque O\'Higgins');
+
+-- Insertamos USUARIOS
+-- (Nota: password_hash es un ejemplo, en producción se usaría HASH)
+INSERT INTO `usuarios` (`id_rol`, `id_plaza`, `rut`, `nombre_usuario`, `correo`, `telefono`, `password_hash`) VALUES
+-- Rol 1: Administrador (sin plaza específica)
+(1, NULL, '11.111.111-1', 'Admin General', 'admin@seguridad.cl', '912345678', 'hash_admin_123'),
+-- Rol 2: Operadores (asignados a plazas)
+(2, 1, '22.222.222-2', 'Operador Turno A', 'operador.a@seguridad.cl', '987654321', 'hash_op_456'),
+(2, 2, '33.333.333-3', 'Operador Turno B', 'operador.b@seguridad.cl', '911223344', 'hash_op_789'),
+-- Rol 3: Vecinos (asociados a sus plazas)
+(3, 1, '44.444.444-4', 'Ana González', 'ana.gonzalez@vecino.cl', '955554444', 'hash_vecino_1'),
+(3, 3, '55.555.555-5', 'Carlos Pérez', 'carlos.perez@vecino.cl', '966667777', 'hash_vecino_2');
+
+-- Insertamos CAMARAS
+INSERT INTO `camaras` (`id_plaza`, `nombre_camara`, `ubicacion`, `estado`, `automatizada`) VALUES
+-- Plaza de Armas (ID 1)
+(1, 'PDA_NORTE', 'Esquina nor-oriente, poste 3', 'activo', 1),
+(1, 'PDA_SUR', 'Frente a Catedral, poste 10', 'mantenimiento', 1),
+-- Plaza Italia (ID 2)
+(2, 'PIT_CENTRO', 'Base monumento Gral. Baquedano', 'activo', 1),
+-- Parque O'Higgins (ID 3)
+(3, 'POH_ACCESO_SUR', 'Entrada Metro Parque O\'Higgins', 'inactivo', 0);
+
+-- Insertamos REPORTES
+INSERT INTO `reportes` (`id_plaza`, `id_camara`, `tipo_reporte`, `descripcion`, `fecha_reporte`, `hora_reporte`, `estado`, `gravedad`) VALUES
+-- Reporte en Plaza de Armas (ID 1), captado por cámara 1
+(1, 1, 'Actividad Sospechosa', 'Grupo de 5 personas merodeando kioskos de noche.', '2025-11-01', '02:30:00', 'en_progreso', 4),
+-- Reporte en Parque O'Higgins (ID 3), sin cámara (informado por vecino)
+(3, NULL, 'Vandalismo', 'Graffiti en estatua acceso sur.', '2025-11-02', '10:00:00', 'abierto', 2);
+
+-- Insertamos ALERTAS (generadas por cámaras automatizadas)
+INSERT INTO `alertas` (`id_camara`, `id_reporte_asociado`, `tipo_alerta`, `descripcion`, `estado_alerta`, `id_usuario_revisor`) VALUES
+-- Alerta que fue ESCALADA al Reporte 1 (Usuario 2 la revisó)
+(1, 1, 'CONTEO_EXCESIVO', 'Detección de 5 personas en área cerrada.', 'escalada', 2),
+-- Alerta PENDIENTE (nueva)
+(3, NULL, 'MOVIMIENTO_SOSPECHOSO', 'Movimiento detectado en Plaza Italia de madrugada.', 'pendiente', NULL),
+-- Alerta DESCARTADA (falsa alarma, Usuario 3 la revisó)
+(1, NULL, 'SONIDO_FUERTE', 'Posible sonido de rotura de vidrio.', 'descartada', 3);
+
+-- Insertamos la relación REPORTE_USUARIOS (N:M)
+INSERT INTO `reporte_usuarios` (`id_reporte`, `id_usuario`, `rol_en_reporte`) VALUES
+-- Reporte 1: Fue reportado por el Operador 2 (ID Usuario 2)
+(1, 2, 'reportado_por'),
+-- Reporte 2: Fue reportado por el Vecino 2 (ID Usuario 5)
+(2, 5, 'reportado_por'),
+-- Reporte 2: Fue asignado al Operador 3 (ID Usuario 3) para seguimiento
+(2, 3, 'asignado_a');
+
+
+-- -----------------------------------------------------
+-- 2. Consultas de Verificación
+-- -----------------------------------------------------
+
+-- Consulta 1: Comprobar registros básicos de tablas principales
+SELECT * FROM `plazas`;
+SELECT * FROM `usuarios`;
+SELECT * FROM `camaras`;
+SELECT * FROM `reportes`;
+
+-- Consulta 2: Mostrar solo registros activos (no borrados lógicamente)
+SELECT * FROM `plazas` WHERE `deleted` = 0;
+SELECT * FROM `usuarios` WHERE `deleted` = 0 AND `activo` = 1;
+
+-- Consulta 3: Validar relaciones (Usuarios con sus Roles)
+SELECT 
+    u.nombre_usuario, 
+    u.correo, 
+    r.nombre_rol
+FROM `usuarios` u
+JOIN `roles` r ON u.id_rol = r.id_rol
+WHERE u.deleted = 0;
+
+-- Consulta 4: Validar relaciones (Alertas escaladas que se convirtieron en Reportes)
+SELECT 
+    a.id_alerta, 
+    a.tipo_alerta, 
+    c.nombre_camara, 
+    p.nombre_plaza,
+    r.id_reporte, 
+    r.descripcion AS descripcion_reporte
+FROM `alertas` a
+JOIN `camaras` c ON a.id_camara = c.id_camara
+JOIN `plazas` p ON c.id_plaza = p.id_plaza
+JOIN `reportes` r ON a.id_reporte_asociado = r.id_reporte
+WHERE a.estado_alerta = 'escalada';
+
+-- -----------------------------------------------------
+-- 3. Pruebas de Restricciones (CHECK)
+-- (Estas consultas DEBERÍAN FALLAR si se ejecutan)
+-- -----------------------------------------------------
+
+/*
+-- Prueba CHECK 1: Insertar un reporte con gravedad fuera de rango (1-5)
+-- (Debería fallar por CONSTRAINT `chk_reporte_gravedad_rango`)
+INSERT INTO `reportes` (`id_plaza`, `tipo_reporte`, `descripcion`, `fecha_reporte`, `hora_reporte`, `gravedad`)
+VALUES (1, 'Prueba CHECK', 'Gravedad 10 (inválida)', '2025-11-03', '15:00:00', 10);
+*/
+
+/*
+-- Prueba CHECK 2: Insertar un usuario con correo inválido
+-- (Debería fallar por CONSTRAINT `chk_usuario_correo_valido`)
+INSERT INTO `usuarios` (`id_rol`, `rut`, `nombre_usuario`, `correo`, `password_hash`)
+VALUES (3, '99.999.999-9', 'Usuario Malo', 'correo-invalido', 'hash');
+*/
