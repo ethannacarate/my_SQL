@@ -1,0 +1,159 @@
+/*
+===========================================================
+==  ACTIVIDAD: PROCEDIMIENTOS ALMACENADOS (INSERT/DELETE)
+==  BASE DE DATOS: tienda_demo (Basado en Cuaderno de Apuntes)
+===========================================================
+*/
+
+/* =========================
+   1) Base de datos
+========================= */
+-- [cite: 36]
+DROP DATABASE IF EXISTS tienda_demo;
+CREATE DATABASE tienda_demo;
+USE tienda_demo;
+
+/* =========================
+   2) Tablas
+========================= */
+-- [cite: 36]
+DROP TABLE IF EXISTS producto;
+DROP TABLE IF EXISTS categoria;
+
+-- Creación de tabla categoria [cite: 36]
+CREATE TABLE categoria (
+  id         INT PRIMARY KEY AUTO_INCREMENT,
+  nombre     VARCHAR(100) NOT NULL,
+  deleted    TINYINT(1) NOT NULL DEFAULT 0,   -- 0=activo, 1=borrado lógico
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- Creación de tabla producto [cite: 37]
+CREATE TABLE producto (
+  id           INT PRIMARY KEY AUTO_INCREMENT,
+  nombre       VARCHAR(120) NOT NULL,
+  precio       DECIMAL(10,2) NOT NULL,
+  categoria_id INT NOT NULL,
+  deleted      TINYINT(1) NOT NULL DEFAULT 0, -- 0=activo, 1=borrado lógico
+  created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_producto_categoria
+    FOREIGN KEY (categoria_id) REFERENCES categoria(id)
+      ON UPDATE CASCADE ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+/* =========================
+   3) Datos base (categorías)
+========================= */
+-- [cite: 37]
+INSERT INTO categoria(nombre) VALUES ('Bebidas'), ('Snacks'), ('Limpieza');
+
+/* ===================================================
+   4) Procedimientos Almacenados (Según Actividad)
+=================================================== */
+
+/* -------------------------
+ * TABLA: producto
+ * ------------------------- */
+
+-- 4.1 Insertar producto [cite: 38]
+DELIMITER //
+CREATE PROCEDURE sp_insertar_producto(
+  IN p_nombre VARCHAR(120),
+  IN p_precio DECIMAL(10,2),
+  IN p_categoria_id INT
+)
+-- BEGIN marca el inicio del bloque de instrucciones [cite: 22, 23]
+BEGIN
+  -- Usamos parámetros IN para los datos de entrada [cite: 25]
+  INSERT INTO producto(nombre, precio, categoria_id, deleted)
+  VALUES (p_nombre, p_precio, p_categoria_id, 0); -- Se inserta con deleted=0 (activo) [cite: 32]
+END//
+-- Se cambia el DELIMITER para definir el fin del SP [cite: 18, 19]
+DELIMITER ;
+
+-- 4.2 Borrado lógico de producto [cite: 39]
+DELIMITER //
+CREATE PROCEDURE sp_borrado_logico_producto(
+  IN p_id INT
+)
+BEGIN
+  -- El borrado lógico solo actualiza el campo 'deleted' a 1 [cite: 31]
+  UPDATE producto
+  SET deleted = 1
+  WHERE id = p_id;
+END//
+DELIMITER ;
+
+/* -------------------------
+ * TABLA: categoria (¡NUEVO!)
+ * ------------------------- */
+ 
+-- 4.3 Insertar categoría (Solicitado en la actividad)
+DELIMITER //
+CREATE PROCEDURE sp_insertar_categoria(
+  IN p_nombre VARCHAR(100)
+)
+BEGIN
+  INSERT INTO categoria(nombre, deleted)
+  VALUES (p_nombre, 0); -- Siempre se crea como activo
+END//
+DELIMITER ;
+
+-- 4.4 Borrado lógico de categoría (Solicitado en la actividad)
+DELIMITER //
+CREATE PROCEDURE sp_borrado_logico_categoria(
+  IN p_id INT
+)
+BEGIN
+  UPDATE categoria
+  SET deleted = 1
+  WHERE id = p_id;
+END//
+DELIMITER ;
+
+/* =========================
+   5) Pruebas y Verificación
+========================= */
+
+-- Usamos CALL para ejecutar los procedimientos [cite: 12]
+
+/* --- Pruebas de INSERCIÓN --- */
+
+-- Insertar productos 
+CALL sp_insertar_producto('Agua 1.5L', 900, 1);
+CALL sp_insertar_producto('Galletas X', 1200, 2);
+CALL sp_insertar_producto('Detergente', 2500, 3);
+
+-- Insertar nueva categoría
+CALL sp_insertar_categoria('Lácteos');
+
+SELECT "(1) PRUEBA DE INSERCIÓN: Deben aparecer 4 categorías (incluyendo Lácteos)";
+SELECT * FROM categoria WHERE deleted = 0;
+
+SELECT "(2) PRUEBA DE INSERCIÓN: Deben aparecer 3 productos";
+-- Esta consulta de verificación usa JOIN [cite: 28, 29]
+SELECT p.id, p.nombre AS producto, p.precio, c.nombre AS categoria
+FROM producto p
+INNER JOIN categoria c ON p.categoria_id = c.id
+WHERE p.deleted = 0; -- Filtramos solo activos [cite: 32]
+
+/* --- Pruebas de BORRADO LÓGICO --- */
+
+-- Borrar el producto 'Agua 1.5L' (ID 1) 
+CALL sp_borrado_logico_producto(1);
+
+-- Borrar la categoría 'Snacks' (ID 2)
+CALL sp_borrado_logico_categoria(2);
+
+SELECT "(3) PRUEBA DE BORRADO: 'Agua 1.5L' (ID 1) NO debe aparecer aquí";
+SELECT p.id, p.nombre AS producto, p.precio, c.nombre AS categoria
+FROM producto p
+INNER JOIN categoria c ON p.categoria_id = c.id
+WHERE p.deleted = 0; -- Solo activos [cite: 32]
+
+SELECT "(4) PRUEBA DE BORRADO: 'Snacks' (ID 2) NO debe aparecer aquí";
+SELECT * FROM categoria WHERE deleted = 0; -- Solo activos
+
+SELECT "(5) PRUEBA DE VERIFICACIÓN: Vemos TODOS (activos e inactivos)";
+SELECT id, nombre, deleted FROM producto;
+SELECT id, nombre, deleted FROM categoria;
